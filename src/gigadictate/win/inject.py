@@ -118,15 +118,16 @@ def snapshot_clipboard() -> list[tuple[int, bytes]] | None:
 
 
 def set_clipboard_text(text: str, private: bool = False) -> int:
+    """Dictated text never goes to the cloud clipboard. private=True (text only "in transit"
+    for a paste) also keeps it out of Win+V history and clipboard monitors."""
+    zero = (0).to_bytes(4, "little")
     with Clipboard():
         api.EmptyClipboard()
         _set_format(api.CF_UNICODETEXT, (text + "\0").encode("utf-16-le"))
+        _set_format(api.RegisterClipboardFormatW("CanUploadToCloudClipboard"), zero)
         if private:
-            # keep dictation that is only "in transit" out of Win+V history and cloud clipboard
-            zero = (0).to_bytes(4, "little")
             _set_format(api.RegisterClipboardFormatW("ExcludeClipboardContentFromMonitorProcessing"), zero)
             _set_format(api.RegisterClipboardFormatW("CanIncludeInClipboardHistory"), zero)
-            _set_format(api.RegisterClipboardFormatW("CanUploadToCloudClipboard"), zero)
     return api.GetClipboardSequenceNumber()
 
 
@@ -216,7 +217,7 @@ class Injector:
             reason = "Пока шло распознавание, вы переключились в другое окно."
         elif not self.self_elevated and window_is_elevated(fg):
             reason = ("Окно запущено от имени администратора, Windows не даёт обычным программам вводить в него текст. "
-                      "Запустите GigaDictate от администратора, если это нужно часто.")
+                      "Текст в буфере обмена — вставьте его через Ctrl+V.")
         elif not wait_modifiers_released():
             reason = "Были зажаты Ctrl/Alt/Shift/Win — печатать в этот момент небезопасно."
         if reason:

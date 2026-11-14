@@ -154,3 +154,13 @@ def test_resampler_streaming_matches_length_and_pitch(rate):
     assert abs(len(out) - 2 * SR) <= 2
     spec = np.abs(np.fft.rfft(out[:SR]))
     assert abs(np.argmax(spec) - 440) <= 2  # frequency preserved, no glitches at block joins
+
+
+def test_no_advice_to_run_elevated():
+    # An elevated GigaDictate would read config and models from a folder any normal program can write.
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    for f in [root / "README.md", *(root / "src").rglob("*.py")]:
+        assert "запускайте GigaDictate тоже от администратора" not in f.read_text(encoding="utf-8")
+        assert "Запустите GigaDictate от администратора" not in f.read_text(encoding="utf-8")

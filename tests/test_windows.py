@@ -99,6 +99,30 @@ def test_clipboard_roundtrip_unicode():
     assert inject.get_clipboard_text() == s
 
 
+def _formats():
+    names = set()
+    with inject.Clipboard():
+        fmt = 0
+        while fmt := api.EnumClipboardFormats(fmt):
+            buf = ctypes.create_unicode_buffer(256)
+            if ctypes.windll.user32.GetClipboardFormatNameW(fmt, buf, 256):
+                names.add(buf.value)
+    return names
+
+
+def test_fallback_clipboard_not_uploaded_to_cloud_but_kept_in_history():
+    inject.set_clipboard_text("диктовка")
+    names = _formats()
+    assert "CanUploadToCloudClipboard" in names
+    assert "CanIncludeInClipboardHistory" not in names  # still reachable through Win+V
+
+
+def test_paste_clipboard_fully_private():
+    inject.set_clipboard_text("диктовка", private=True)
+    assert {"CanUploadToCloudClipboard", "CanIncludeInClipboardHistory",
+            "ExcludeClipboardContentFromMonitorProcessing"} <= _formats()
+
+
 def test_clipboard_snapshot_restore():
     inject.set_clipboard_text("старое содержимое")
     snap = inject.snapshot_clipboard()
