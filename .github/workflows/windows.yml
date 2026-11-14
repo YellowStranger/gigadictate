@@ -5,14 +5,18 @@ on:
   pull_request:
   workflow_dispatch:
 
+env:
+  PYTHONIOENCODING: utf-8
+  PYTHONUTF8: "1"
+
 jobs:
   windows:
     runs-on: windows-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -22,7 +26,7 @@ jobs:
         run: pip install -r requirements-dev.txt
 
       - name: Cache model
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: models
           key: gigaam-v3-e2e-rnnt-int8-v1
@@ -61,7 +65,7 @@ jobs:
           Get-ChildItem dist/GigaDictate/_internal -Recurse -File | Sort-Object Length -Descending | Select-Object -First 15 FullName, @{n='MB';e={[math]::Round($_.Length/1MB,1)}} | Format-Table -AutoSize
 
       - name: Upload portable build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: GigaDictate-windows-x64
           path: dist/GigaDictate

@@ -105,7 +105,8 @@ class Controller:
     def _control_loop(self) -> None:
         while not self._stop_evt.is_set():
             try:
-                cmd = self.cmds.get(timeout=0.1)
+                # Poll often only while recording; when idle just wake up now and then for unloading.
+                cmd = self.cmds.get(timeout=0.1 if self.session else 2.0)
             except queue.Empty:
                 cmd = None
             try:
