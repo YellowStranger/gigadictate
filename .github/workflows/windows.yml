@@ -2,11 +2,16 @@ name: Windows build & tests
 
 on:
   push:
+    branches: ["**"]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
 env:
   PYTHONIOENCODING: utf-8
+
+permissions:
+  contents: write
 
 jobs:
   windows:
@@ -69,3 +74,23 @@ jobs:
           name: GigaDictate-windows-x64
           path: dist/GigaDictate
           retention-days: 30
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $zip = "GigaDictate-$tag-windows-x64.zip"
+          Compress-Archive -Path dist/GigaDictate -DestinationPath $zip -CompressionLevel Optimal
+          $size = Get-Content size.txt
+          $notes = @"
+          Портативная сборка для Windows 10/11 x64, модель GigaAM v3 e2e RNNT уже внутри.
+
+          1. Распакуйте архив в любую папку.
+          2. Запустите ``GigaDictate\GigaDictate.exe``. Exe работает только вместе с папками ``_internal`` и ``models`` рядом с ним.
+          3. Удерживайте правый Ctrl и говорите, или нажмите его один раз, чтобы начать, и ещё раз, чтобы закончить.
+
+          $size
+          "@
+          gh release create $tag $zip --title "GigaDictate $tag" --notes $notes
