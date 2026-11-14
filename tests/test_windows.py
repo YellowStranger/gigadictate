@@ -170,8 +170,17 @@ def test_paste_into_window_and_restore_clipboard(win):
     inject.set_clipboard_text("пользовательский буфер")
     inj = inject.Injector(Config(insert_method="paste"))
     text = "Длинный текст через буфер обмена. " * 5
-    assert inj.insert(text, inj.foreground()) == ""
+    # As in the app: insertion runs on a worker thread while the target window keeps processing input.
+    import threading
+
+    result = []
+    target = inj.foreground()
+    t = threading.Thread(target=lambda: result.append(inj.insert(text, target)))
+    t.start()
     assert win.wait_text(lambda v: v == text, 5), repr(win.value)
+    while t.is_alive():
+        win.pump(0.05)
+    assert result == [""]
     assert inject.get_clipboard_text() == "пользовательский буфер"
 
 

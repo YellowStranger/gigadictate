@@ -179,6 +179,32 @@ def test_lost_key_up_recovered_by_tick(m):
     assert m.log[-1] == "start"
 
 
+def test_tick_ignores_swallowed_keys():
+    # Windows doesn't record swallowed keys as pressed: tick must not take F9 for released.
+    m = make("f9")
+    m.key_down(F9)
+    m.clk.t += 0.1
+    m.tick(lambda vk: False)
+    m.clk.t += 0.2
+    m.key_down(F9)  # auto-repeat keeps coming
+    m.clk.t += 0.5
+    m.key_down(F9)
+    m.key_up(F9)
+    assert m.log == ["start", "stop"]  # hold mode, not toggle
+
+
+def test_lost_key_up_of_swallowed_key_recovered_on_next_press():
+    m = make("f9")
+    m.key_down(F9)
+    m.clk.t += 0.1
+    m.key_up(F9)  # toggle mode
+    m.key_down(F9)  # second press: stop ... its key-up gets lost
+    assert m.log == ["start", "stop"]
+    m.clk.t += 30
+    m.key_down(F9)  # a fresh press long after must start again, not be taken for auto-repeat
+    assert m.log == ["start", "stop", "start"]
+
+
 def test_force_stop_then_release(m):
     m.key_down(VK_RCONTROL)
     m.force_stop()  # e.g. max duration reached while held

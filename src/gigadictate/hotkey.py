@@ -209,6 +209,8 @@ WAIT_RELEASE = "wait_release"  # done, ignoring until hotkey fully released
 
 class HotkeyMachine:
     SHORTCUT_WINDOW_S = 1.0
+    # Windows auto-repeat: first repeat after <= 1 s, then >= 2.5 per second.
+    REPEAT_GAP_S = 1.2
 
     def __init__(self, combo: Combo, callbacks: Callbacks, hold_threshold_s: float = 0.35,
                  clock: Callable[[], float] | None = None):
@@ -221,6 +223,7 @@ class HotkeyMachine:
         self.state = IDLE
         self.down: set[int] = set()
         self._swallowed: set[int] = set()
+        self._last_down: dict[int, float] = {}
         self._t0 = 0.0
         self.recording = False
         self._trigger_vks = frozenset().union(*[g for g in combo if not g <= MODIFIER_VKS]) if combo else frozenset()
@@ -244,11 +247,16 @@ class HotkeyMachine:
 
     def key_down(self, vk: int) -> bool:
         """Returns True if the event must be swallowed."""
-        if vk in self.down:  # auto-repeat
-            return vk in self._swallowed
+        now = self.clock()
+        if vk in self.down:
+            if now - self._last_down.get(vk, now) <= self.REPEAT_GAP_S:  # auto-repeat
+                self._last_down[vk] = now
+                return vk in self._swallowed
+            # No repeats for a long time: the key-up was lost (secure desktop) and this is a new press.
+            self.key_up(vk)
+        self._last_down[vk] = now
         was = self.satisfied()
         self.down.add(vk)
-        now = self.clock()
 
         if self.recording and vk == VK_ESCAPE:
             self._cancel()
@@ -299,9 +307,10 @@ class HotkeyMachine:
         return swallow
 
     def tick(self, is_physically_down: Callable[[int], bool]) -> None:
-        """Repair state when key-up events were lost (secure desktop, lock screen)."""
+        """Repair state when key-up events were lost (secure desktop, lock screen).
+        Keys we swallowed never reach Windows' key state, so they can't be checked this way."""
         for vk in list(self.down):
-            if not is_physically_down(vk):
+            if vk not in self._swallowed and not is_physically_down(vk):
                 self.key_up(vk)
 
     def force_stop(self) -> None:

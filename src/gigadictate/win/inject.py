@@ -202,6 +202,7 @@ class Injector:
     def __init__(self, cfg):
         self.cfg = cfg
         self.self_elevated = bool(_is_elevated_pid(None))
+        self.restore_delay_s = 0.5
 
     def foreground(self):
         return _root(api.GetForegroundWindow())
@@ -242,7 +243,7 @@ class Injector:
             ok = send_inputs([_key(api.VK_LCONTROL), _key(0x56), _key(0x56, flags=api.KEYEVENTF_KEYUP),
                               _key(api.VK_LCONTROL, flags=api.KEYEVENTF_KEYUP)])
             # The target app reads the clipboard asynchronously; restoring too early pastes the old content.
-            time.sleep(0.4)
+            time.sleep(self.restore_delay_s)
             if api.GetClipboardSequenceNumber() == seq:
                 restore_clipboard(saved)
             return ok
