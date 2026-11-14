@@ -61,12 +61,31 @@ jobs:
           GIGADICTATE_EXE: ${{ github.workspace }}\dist\GigaDictate\GigaDictate.exe
         run: python -m pytest tests/test_e2e_windows.py -v -s -rs
 
+      - name: Build installer
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; if ($LASTEXITCODE) { exit 1 } }
+          $ver = if ("${{ github.ref }}".StartsWith("refs/tags/v")) { "${{ github.ref_name }}".Substring(1) } else { python -c "import sys; sys.path.insert(0, 'src'); import gigadictate; print(gigadictate.__version__)" }
+          & $iscc "/DAppVersion=$ver" installer\GigaDictate.iss
+          if ($LASTEXITCODE) { exit 1 }
+          Get-ChildItem dist\GigaDictate-Setup-*.exe | ForEach-Object { "Installer: {0:N1} MB" -f ($_.Length / 1MB) }
+
+      - name: Installer test (install, run, update, uninstall)
+        run: ./scripts/test_installer.ps1 -Setup (Get-ChildItem dist\GigaDictate-Setup-*.exe).FullName
+
       - name: Size report
         run: |
           $app = (Get-ChildItem dist/GigaDictate -Recurse -File | Where-Object { $_.FullName -notmatch '\\models\\' } | Measure-Object Length -Sum).Sum / 1MB
           $mdl = (Get-ChildItem dist/GigaDictate/models -Recurse -File | Measure-Object Length -Sum).Sum / 1MB
           "Program: {0:N1} MB, model: {1:N1} MB" -f $app, $mdl | Tee-Object -FilePath size.txt
           Get-ChildItem dist/GigaDictate/_internal -Recurse -File | Sort-Object Length -Descending | Select-Object -First 15 FullName, @{n='MB';e={[math]::Round($_.Length/1MB,1)}} | Format-Table -AutoSize
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v5
+        with:
+          name: GigaDictate-Setup
+          path: dist/GigaDictate-Setup-*.exe
+          retention-days: 30
 
       - name: Upload portable build
         uses: actions/upload-artifact@v5
@@ -81,16 +100,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "${{ github.ref_name }}"
-          $zip = "GigaDictate-$tag-windows-x64.zip"
+          $zip = "GigaDictate-$tag-portable-windows-x64.zip"
           Compress-Archive -Path dist/GigaDictate -DestinationPath $zip -CompressionLevel Optimal
-          $size = Get-Content size.txt
+          $setup = (Get-ChildItem dist\GigaDictate-Setup-*.exe).FullName
           $notes = @"
-          Портативная сборка для Windows 10/11 x64, модель GigaAM v3 e2e RNNT уже внутри.
+          Голосовой ввод для Windows 10/11 x64. Модель распознавания GigaAM v3 уже внутри, интернет не нужен.
 
-          1. Распакуйте архив в любую папку.
-          2. Запустите ``GigaDictate\GigaDictate.exe``. Exe работает только вместе с папками ``_internal`` и ``models`` рядом с ним.
-          3. Удерживайте правый Ctrl и говорите, или нажмите его один раз, чтобы начать, и ещё раз, чтобы закончить.
+          **Установка (рекомендуется):** скачайте ``$(Split-Path $setup -Leaf)`` и запустите. Права администратора не нужны. Мастер установки покажет каждый шаг, предложит включить автозапуск и сразу запустить программу. Удаляется через «Параметры → Приложения».
 
-          $size
+          **Без установки:** архив ``$zip``. Распакуйте его и запустите ``GigaDictate\GigaDictate.exe`` (рядом с ним должны остаться папки ``_internal`` и ``models``).
+
+          Как диктовать: удерживайте правый Ctrl и говорите, или нажмите его один раз, чтобы начать, и ещё раз, чтобы закончить. Esc отменяет запись.
           "@
-          gh release create $tag $zip --title "GigaDictate $tag" --notes $notes
+          gh release create $tag $setup $zip --title "GigaDictate $tag" --notes $notes
