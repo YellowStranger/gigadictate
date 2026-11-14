@@ -1,0 +1,68 @@
+name: Windows build & tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Cache model
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: gigaam-v3-e2e-rnnt-int8-v1
+
+      - name: Download model
+        run: python scripts/fetch_models.py gigaam-v3-e2e-rnnt
+
+      - name: Unit + integration tests (real model)
+        env:
+          PYTHONPATH: src
+        run: python -m pytest tests -v -rs --ignore=tests/test_e2e_windows.py
+
+      - name: End-to-end test (python source)
+        env:
+          PYTHONPATH: src
+        run: python -m pytest tests/test_e2e_windows.py -v -s -rs
+
+      - name: Build exe
+        run: |
+          python scripts/make_ico.py GigaDictate.ico
+          python -m PyInstaller GigaDictate.spec --noconfirm
+          Copy-Item -Recurse models dist/GigaDictate/models
+          Copy-Item README.md dist/GigaDictate/README.md
+
+      - name: End-to-end test (built exe)
+        env:
+          PYTHONPATH: src
+          GIGADICTATE_EXE: ${{ github.workspace }}\dist\GigaDictate\GigaDictate.exe
+        run: python -m pytest tests/test_e2e_windows.py -v -s -rs
+
+      - name: Size report
+        run: |
+          $app = (Get-ChildItem dist/GigaDictate -Recurse -File | Where-Object { $_.FullName -notmatch '\\models\\' } | Measure-Object Length -Sum).Sum / 1MB
+          $mdl = (Get-ChildItem dist/GigaDictate/models -Recurse -File | Measure-Object Length -Sum).Sum / 1MB
+          "Program: {0:N1} MB, model: {1:N1} MB" -f $app, $mdl | Tee-Object -FilePath size.txt
+          Get-ChildItem dist/GigaDictate/_internal -Recurse -File | Sort-Object Length -Descending | Select-Object -First 15 FullName, @{n='MB';e={[math]::Round($_.Length/1MB,1)}} | Format-Table -AutoSize
+
+      - name: Upload portable build
+        uses: actions/upload-artifact@v4
+        with:
+          name: GigaDictate-windows-x64
+          path: dist/GigaDictate
+          retention-days: 30

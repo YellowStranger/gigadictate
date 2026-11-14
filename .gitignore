@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+/models/
+/build/
+/dist/
+*.partial/
+.pytest_cache/
+/GigaDictate.ico
