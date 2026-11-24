@@ -60,7 +60,8 @@ def tone_wav(freqs: list[float], dur_s: float = 0.07, volume: float = 0.18, sr: 
     for f in freqs:
         t = np.arange(int(sr * dur_s)) / sr
         env = np.minimum(1, np.minimum(t, dur_s - t) / 0.01)  # 10 ms fade: no clicks
-        parts.append(np.sin(2 * np.pi * f * t) * env)
+        parts.append((0.80 * np.sin(2 * np.pi * f * t) + 0.20 * np.sin(4 * np.pi * f * t))
+                     * np.exp(-2.8 * t / dur_s) * env)
     pcm = (np.concatenate(parts) * volume * 32767).astype("<i2").tobytes()
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
@@ -72,8 +73,8 @@ def tone_wav(freqs: list[float], dur_s: float = 0.07, volume: float = 0.18, sr: 
 
 
 SOUNDS = {
-    "start": ([660, 990], 0.11),
-    "stop": ([880, 660], 0.06),
+    "start": ([554.37, 830.61], 0.135),
+    "stop": ([739.99, 493.88], 0.145),
     "cancel": ([440, 330], 0.07),
     "error": ([300, 300], 0.12),
 }

@@ -45,6 +45,7 @@ class Session:
     parts: dict[int, str] = field(default_factory=dict)
     n_segments: int = 0
     samples: int = 0
+    draft: Any = None
     last_preview: int = 0
     preview_pending: bool = False
     peak: float = 0.0
@@ -117,7 +118,10 @@ class Controller:
                     session, text = cmd
                     session.preview_pending = False
                     if session is self.session and text:
-                        self.ui.preview(text)
+                        if session.draft and not session.draft.replace(text):
+                            session.draft = None
+                        if not session.draft:
+                            self.ui.preview(text)
                 elif cmd:
                     getattr(self, f"_do_{cmd}")()
                 self._pump()
@@ -147,7 +151,9 @@ class Controller:
             return
         self.session = Session(target=self.injector.foreground(), t0=self.clock(), recorder=rec)
         self.ui.set_state("recording")
-        self.ui.preview("Слушаю…")
+        self.session.draft = self.injector.begin_draft(self.session.target)
+        if not self.session.draft:
+            self.ui.preview("Слушаю…")
         if self.cfg.sounds:
             self.ui.play("start")
 
@@ -173,6 +179,8 @@ class Controller:
             return
         self.session = None
         self.ui.preview("")
+        if s.draft:
+            s.draft.replace("", restore=True)
         s.cancelled = True
         s.recorder.abort()
         self._refresh_state()
@@ -293,12 +301,14 @@ class Controller:
         text = finalize([s.parts[i] for i in sorted(s.parts)],
                         voice_commands=self.cfg.voice_commands, trailing_space=self.cfg.trailing_space)
         if not text:
+            if s.draft:
+                s.draft.replace("", restore=True)
             if s.error:
                 self.ui.notify("Ошибка распознавания", s.error, True)
             else:
                 self.ui.notify("Речь не распознана", "Попробуйте говорить ближе к микрофону.")
             return
-        reason = self.injector.insert(text, s.target)
+        reason = "" if s.draft and s.draft.replace(text) else self.injector.clipboard(text)
         self.inserted.append(text)
         del self.inserted[:-5]
         if reason:

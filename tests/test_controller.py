@@ -42,6 +42,12 @@ class FakeInjector:
     def foreground(self):
         return "window-1"
 
+    def begin_draft(self, target):
+        return None
+
+    def clipboard(self, text):
+        return self.insert(text, "window-1")
+
     def insert(self, text, target):
         self.texts.append((text, target))
         return self.fail_reason

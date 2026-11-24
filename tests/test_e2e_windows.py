@@ -74,45 +74,59 @@ def app(tmp_path):
 def test_hold_to_talk_types_text(app):
     win = TkWindow()
     try:
-        raw_key(api.VK_RCONTROL)
+        # A real Win32 EDIT child, addressable across processes during push-to-talk.
         user32 = ctypes.windll.user32
-        user32.FindWindowW.restype = wt.HWND
-        deadline = time.monotonic() + 5
-        while not (caption := user32.FindWindowW("Static", "Слушаю…")):
-            assert time.monotonic() < deadline, "preview did not open"
-            win.pump(0.05)
-        caption = wt.HWND(caption)
-        buf = ctypes.create_unicode_buffer(256)
-        deadline = time.monotonic() + 12
-        while "15:30" not in buf.value:
-            assert time.monotonic() < deadline, buf.value
+        edit = wt.HWND(api.CreateWindowExW(0, "EDIT", "", 0x50000000, 0, 0, 240, 32,
+                                           win.hwnd, None, None, None))
+        user32.SetFocus(edit)
+        def value():
+            buf = ctypes.create_unicode_buffer(2048)
+            user32.GetWindowTextW(edit, buf, len(buf))
+            return buf.value
+
+        raw_key(api.VK_RCONTROL)
+        deadline = time.monotonic() + 15
+        while "15:30" not in value():
+            assert time.monotonic() < deadline, value()
             win.pump(0.1)
-            user32.GetWindowTextW(caption, buf, len(buf))
-        assert user32.IsWindowVisible(caption) and win.value == ""
         raw_key(api.VK_RCONTROL, up=True)
-        assert win.wait_text(lambda v: "диктовки" in v.lower(), 20), win.value
-        assert not user32.IsWindowVisible(caption)
-        print("typed:", repr(win.value))
-        assert "15:30" in win.value and win.value.endswith(" ")
-
-        # toggle mode: tap, speak, tap
-        win.text.delete("1.0", "end")
+        deadline = time.monotonic() + 12
+        while not value().endswith(" "):
+            assert time.monotonic() < deadline, value()
+            win.pump(0.1)
+        assert value().count("15:30") == 1
+        api.SetWindowTextW(edit, "")
         raw_key(api.VK_RCONTROL)
         raw_key(api.VK_RCONTROL, up=True)
-        win.pump(4.6)
-        raw_key(api.VK_RCONTROL)
-        raw_key(api.VK_RCONTROL, up=True)
-        assert win.wait_text(lambda v: "диктовки" in v.lower(), 20), win.value
-
-        # Esc cancels: nothing typed, Esc not delivered
-        win.text.delete("1.0", "end")
-        raw_key(api.VK_RCONTROL)
-        raw_key(api.VK_RCONTROL, up=True)
-        win.pump(1.5)
+        deadline = time.monotonic() + 15
+        while not value():
+            assert time.monotonic() < deadline
+            win.pump(0.1)
         raw_key(0x1B)
         raw_key(0x1B, up=True)
-        win.pump(3)
-        assert win.value == ""
+        win.pump(1)
+        assert value() == ""
+        # Without an editable target the card stays on top without taking focus.
+        button = wt.HWND(api.CreateWindowExW(0, "BUTTON", "OK", 0x50000000, 0, 0, 80, 32,
+                                             win.hwnd, None, None, None))
+        user32.SetFocus(button)
+        raw_key(api.VK_RCONTROL)
+        win.pump(4.7)
+        user32.FindWindowW.restype = wt.HWND
+        card = wt.HWND(user32.FindWindowW("GigaDictateClipboard", None))
+        assert card.value and user32.IsWindowVisible(card)
+        raw_key(api.VK_RCONTROL, up=True)
+        from gigadictate.win.inject import get_clipboard_text
+        deadline = time.monotonic() + 12
+        while "15:30" not in (get_clipboard_text() or ""):
+            assert time.monotonic() < deadline
+            win.pump(0.1)
+        win.pump(0.3)
+        assert not user32.IsWindowVisible(card)
+        api.DestroyWindow(button)
+        api.DestroyWindow(edit)
+        win.text.focus_force()
+        win.pump(0.1)
 
         # a shortcut with the hotkey (Right Ctrl + A) is not a dictation
         win.text.insert("1.0", "abc")

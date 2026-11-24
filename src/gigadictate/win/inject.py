@@ -208,6 +208,16 @@ class Injector:
     def foreground(self):
         return _root(api.GetForegroundWindow())
 
+    def begin_draft(self, target):
+        from .draft import AccessibleDraft, Draft
+        if target and (self.self_elevated or not window_is_elevated(target)):
+            return Draft.open(target) or AccessibleDraft.open(target)
+        return None
+
+    def clipboard(self, text):
+        set_clipboard_text(text)
+        return "Текст готов."
+
     def insert(self, text: str, target) -> str:
         fg = _root(api.GetForegroundWindow())
         reason = ""
