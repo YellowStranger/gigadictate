@@ -165,7 +165,7 @@ def test_browser_message_field(app):
     from gigadictate.win.inject import get_clipboard_text, set_clipboard_text
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(channel="msedge", headless=False)
+        browser = playwright.chromium.launch(channel="chrome", headless=False)
         page = browser.new_page()
         page.set_content('<div role="textbox" aria-label="Сообщение" contenteditable="true">Черновик: </div>')
         page.bring_to_front()
