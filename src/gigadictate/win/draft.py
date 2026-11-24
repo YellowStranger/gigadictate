@@ -28,7 +28,11 @@ def message(hwnd, msg, wp=0, lp=0):
 def focused(target):
     info = GuiInfo()
     info.size = c.sizeof(info)
-    if target and api.GetForegroundWindow() == target and gui_info(0, c.byref(info)):
+    fg = api.GetForegroundWindow()
+    if not fg or (api.GetAncestor(fg, api.GA_ROOT) or fg) != target:
+        return None
+    thread = api.GetWindowThreadProcessId(fg, None)
+    if thread and gui_info(thread, c.byref(info)):
         return info.focus
     return None
 

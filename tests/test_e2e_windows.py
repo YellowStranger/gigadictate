@@ -168,7 +168,15 @@ def test_browser_message_field(app):
         browser = playwright.chromium.launch(channel="chrome", headless=False)
         page = browser.new_page()
         page.set_content('<div role="textbox" aria-label="Сообщение" contenteditable="true">Черновик: </div>')
+        page.evaluate("document.title = 'GigaDictate browser test'")
         page.bring_to_front()
+        from test_windows import force_foreground
+        user32 = ctypes.windll.user32
+        user32.FindWindowW.restype = wt.HWND
+        hwnd = user32.FindWindowW("Chrome_WidgetWin_1", "GigaDictate browser test - Google Chrome")
+        assert hwnd, "Chrome window not found"
+        force_foreground(hwnd)
+        assert api.GetForegroundWindow() == hwnd
         editor = page.get_by_role("textbox")
         editor.click()
         editor.press("End")

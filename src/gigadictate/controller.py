@@ -156,6 +156,9 @@ class Controller:
         self.session.draft = self.injector.begin_draft(self.session.target)
         if not self.session.draft:
             self.session.deferred_focus = self.injector.typing_focus(target)
+        log.info("dictation target: hwnd=%s route=%s", target,
+                 type(self.session.draft).__name__ if self.session.draft else
+                 ("typing" if self.session.deferred_focus else "clipboard"))
         if not self.session.draft and not self.session.deferred_focus:
             self.ui.preview("Слушаю…")
         if self.cfg.sounds:
