@@ -27,6 +27,7 @@ log = logging.getLogger(__name__)
 class UI(Protocol):
     def set_state(self, state: str) -> None: ...  # idle | recording | processing
     def notify(self, title: str, text: str, error: bool = False) -> None: ...
+    def preview(self, text: str) -> None: ...
     def play(self, sound: str) -> None: ...  # start | stop | cancel | error
 
 
@@ -44,6 +45,8 @@ class Session:
     parts: dict[int, str] = field(default_factory=dict)
     n_segments: int = 0
     samples: int = 0
+    last_preview: int = 0
+    preview_pending: bool = False
     peak: float = 0.0
     cancelled: bool = False
     error: str | None = None
@@ -110,7 +113,12 @@ class Controller:
             except queue.Empty:
                 cmd = None
             try:
-                if cmd:
+                if isinstance(cmd, tuple):
+                    session, text = cmd
+                    session.preview_pending = False
+                    if session is self.session and text:
+                        self.ui.preview(text)
+                elif cmd:
                     getattr(self, f"_do_{cmd}")()
                 self._pump()
                 self._maybe_unload()
@@ -139,6 +147,7 @@ class Controller:
             return
         self.session = Session(target=self.injector.foreground(), t0=self.clock(), recorder=rec)
         self.ui.set_state("recording")
+        self.ui.preview("Слушаю…")
         if self.cfg.sounds:
             self.ui.play("start")
 
@@ -147,6 +156,7 @@ class Controller:
         if s is None:
             return
         self.session = None
+        self.ui.preview("")
         audio = s.recorder.stop(self.cfg.tail_ms / 1000)
         self._feed(s, audio)
         self._submit(s, s.segmenter.flush())
@@ -162,6 +172,7 @@ class Controller:
         if s is None:
             return
         self.session = None
+        self.ui.preview("")
         s.cancelled = True
         s.recorder.abort()
         self._refresh_state()
@@ -173,6 +184,11 @@ class Controller:
         if s is None:
             return
         self._feed(s, s.recorder.read())
+        if (not s.preview_pending and s.samples - s.last_preview >= SR * 2
+                and len(s.segmenter) and self.jobs.empty()):
+            s.preview_pending = True
+            s.last_preview = s.samples
+            self.jobs.put(("preview", s, s.segmenter.snapshot()))
         if s.recorder.error:
             s.error = s.recorder.error
             self.ui.notify("Запись остановлена", s.error, True)
@@ -230,6 +246,15 @@ class Controller:
             elif kind == "unload":
                 if self.session is None and self.jobs.empty():
                     self.engine.unload()
+            elif kind == "preview":
+                draft = ""
+                try:
+                    if self.session is s and has_speech(payload):
+                        partial = self.engine.recognize(normalize(payload), SR)
+                        draft = finalize([*s.parts.values(), partial], voice_commands=self.cfg.voice_commands,
+                                         trailing_space=False)
+                finally:
+                    self.cmds.put((s, draft))
             elif kind == "seg":
                 self._recognize_segment(s, *payload)
             elif kind == "final":

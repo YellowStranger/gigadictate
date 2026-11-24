@@ -164,3 +164,10 @@ def test_no_advice_to_run_elevated():
     for f in [root / "README.md", *(root / "src").rglob("*.py")]:
         assert "запускайте GigaDictate тоже от администратора" not in f.read_text(encoding="utf-8")
         assert "Запустите GigaDictate от администратора" not in f.read_text(encoding="utf-8")
+
+
+def test_spoken_punctuation_and_literal_mode():
+    from gigadictate.textproc import finalize
+    parts = ["Привет, запятая друг. точка с запятой дальше вопросительный знак."]
+    assert finalize(parts, voice_commands=True, trailing_space=False) == "Привет, друг; дальше?"
+    assert finalize(parts, voice_commands=False, trailing_space=False) == parts[0]

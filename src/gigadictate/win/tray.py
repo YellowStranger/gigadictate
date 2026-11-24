@@ -69,12 +69,28 @@ class Tray:
             data = assets.tone_wav(freqs, dur)
             if not p.exists() or p.read_bytes() != data:
                 p.write_bytes(data)
+        width = min(640, api.GetSystemMetrics(0))
+        # WS_EX_NOACTIVATE | TOOLWINDOW | TOPMOST. Owned by the tray for automatic cleanup.
+        self.caption = api.CreateWindowExW(0x08000088, "STATIC", "", 0x80800201,
+                                           (api.GetSystemMetrics(0) - width) // 2,
+                                           max(0, api.GetSystemMetrics(1) - 150),
+                                           width, 72, self.hwnd, None, hinst, None)
         self._add_icon()
 
     # ---------------------------------------------------------------- UI protocol (any thread)
     def set_state(self, state: str) -> None:
         self.state = state
         api.PostMessageW(self.hwnd, WM_REFRESH, 0, 0)
+
+    def preview(self, text: str) -> None:
+        def update():
+            # Keep the most recent words visible even during a long dictation.
+            caption = " ".join(text.split())
+            if len(caption) > 100:
+                caption = "…" + caption[-99:]
+            api.SetWindowTextW(self.caption, caption)
+            api.ShowWindow(self.caption, 4 if caption else 0)  # SW_SHOWNOACTIVATE / SW_HIDE
+        self.call(update)
 
     def set_hint(self, hint: str) -> None:
         self.hint = hint

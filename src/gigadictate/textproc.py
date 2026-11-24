@@ -36,6 +36,13 @@ def join_segments(parts: list[str]) -> str:
     return out
 
 
+_SIGNS = {"точка с запятой": ";", "вопросительный знак": "?", "восклицательный знак": "!",
+          "запятая": ",", "точка": ".", "двоеточие": ":", "многоточие": "…", "тире": " —"}
+_PUNCT_COMMAND = re.compile(
+    r"[ ,.;:!?…]*\b(" + "|".join(_SIGNS) + r")\b[ ,.;:!?…]*", re.IGNORECASE
+)
+
+
 def apply_voice_commands(text: str) -> str:
     def repl(m: re.Match) -> str:
         cmd = m.group("cmd").lower()
@@ -47,6 +54,8 @@ def apply_voice_commands(text: str) -> str:
         return keep + nl
 
     out = _CMD.sub(repl, text)
+    out = _PUNCT_COMMAND.sub(lambda m: _SIGNS[m[1].lower()] + " ", out)
+    out = re.sub(r"([.!?…]) ([а-яё])", lambda m: m[1] + " " + m[2].upper(), out)
     # capitalise the first letter of each new line
     out = re.sub(r"(^|\n)([a-zа-яё])", lambda m: m.group(1) + m.group(2).upper(), out)
     return out.strip(" ")

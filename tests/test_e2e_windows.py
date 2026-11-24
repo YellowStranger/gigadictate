@@ -75,9 +75,23 @@ def test_hold_to_talk_types_text(app):
     win = TkWindow()
     try:
         raw_key(api.VK_RCONTROL)
-        win.pump(4.6)  # "speak" while the key is held (the WAV is 4.2 s)
+        user32 = ctypes.windll.user32
+        user32.FindWindowW.restype = wt.HWND
+        deadline = time.monotonic() + 5
+        while not (caption := user32.FindWindowW("Static", "Слушаю…")):
+            assert time.monotonic() < deadline, "preview did not open"
+            win.pump(0.05)
+        caption = wt.HWND(caption)
+        buf = ctypes.create_unicode_buffer(256)
+        deadline = time.monotonic() + 12
+        while "диктовки" not in buf.value.lower():
+            assert time.monotonic() < deadline, buf.value
+            win.pump(0.1)
+            user32.GetWindowTextW(caption, buf, len(buf))
+        assert user32.IsWindowVisible(caption) and win.value == ""
         raw_key(api.VK_RCONTROL, up=True)
         assert win.wait_text(lambda v: "диктовки" in v.lower(), 20), win.value
+        assert not user32.IsWindowVisible(caption)
         print("typed:", repr(win.value))
         assert "15:30" in win.value and win.value.endswith(" ")
 

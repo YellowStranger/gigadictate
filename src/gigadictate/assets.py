@@ -72,7 +72,7 @@ def tone_wav(freqs: list[float], dur_s: float = 0.07, volume: float = 0.18, sr: 
 
 
 SOUNDS = {
-    "start": ([660, 880], 0.06),
+    "start": ([660, 990], 0.11),
     "stop": ([880, 660], 0.06),
     "cancel": ([440, 330], 0.07),
     "error": ([300, 300], 0.12),

@@ -21,6 +21,9 @@ class FakeUI:
     def __init__(self):
         self.states, self.notes, self.sounds = [], [], []
 
+    def preview(self, text):
+        self.draft = text
+
     def set_state(self, s):
         self.states.append(s)
 
@@ -257,3 +260,23 @@ def test_idle_unload_and_reload():
 
 def test_models_root_exists():
     assert models_root().name == "models"
+
+
+@needs_model
+def test_live_preview_before_release(engine):
+    ui, inj = FakeUI(), FakeInjector()
+    c = Controller(Config(), engine, lambda: WavRecorder(DATA / "short.wav", realtime=False), inj, ui)
+    c.start_threads()
+    try:
+        c.request_start()
+        deadline = time.monotonic() + 10
+        while "диктовки" not in getattr(ui, "draft", "").lower() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert "диктовки" in ui.draft.lower()
+        assert ui.sounds == ["start"] and not inj.texts
+        c.request_stop()
+        assert c.wait_idle()
+        assert ui.draft == "" and len(inj.texts) == 1
+        assert ui.sounds == ["start", "stop"]
+    finally:
+        c.shutdown()

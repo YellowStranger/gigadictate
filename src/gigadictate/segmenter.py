@@ -71,6 +71,10 @@ class Segmenter:
                 return out
             out.append(seg)
 
+    def snapshot(self) -> np.ndarray:
+        """Audio blocks are immutable after feed; the worker may retain this view."""
+        return self._buffer()
+
     def flush(self) -> np.ndarray:
         buf = self._buffer()
         self._chunks, self._len = [], 0

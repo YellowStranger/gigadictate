@@ -162,6 +162,8 @@ RegisterWindowMessageW = _fn(user32, "RegisterWindowMessageW", c_uint, wt.LPCWST
 RegisterClassW = _fn(user32, "RegisterClassW", wt.ATOM, POINTER(WNDCLASSW))
 CreateWindowExW = _fn(user32, "CreateWindowExW", wt.HWND, wt.DWORD, wt.LPCWSTR, wt.LPCWSTR, wt.DWORD, c_int, c_int,
                       c_int, c_int, wt.HWND, HMENU, wt.HINSTANCE, c_void_p)
+SetWindowTextW = _fn(user32, "SetWindowTextW", wt.BOOL, wt.HWND, wt.LPCWSTR)
+ShowWindow = _fn(user32, "ShowWindow", wt.BOOL, wt.HWND, c_int)
 DestroyWindow = _fn(user32, "DestroyWindow", wt.BOOL, wt.HWND)
 DefWindowProcW = _fn(user32, "DefWindowProcW", LRESULT, wt.HWND, c_uint, wt.WPARAM, wt.LPARAM)
 CreatePopupMenu = _fn(user32, "CreatePopupMenu", HMENU)
