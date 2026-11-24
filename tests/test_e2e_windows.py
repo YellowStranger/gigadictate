@@ -84,7 +84,7 @@ def test_hold_to_talk_types_text(app):
         caption = wt.HWND(caption)
         buf = ctypes.create_unicode_buffer(256)
         deadline = time.monotonic() + 12
-        while "диктовки" not in buf.value.lower():
+        while "15:30" not in buf.value:
             assert time.monotonic() < deadline, buf.value
             win.pump(0.1)
             user32.GetWindowTextW(caption, buf, len(buf))
