@@ -33,10 +33,15 @@ def force_foreground(hwnd):
 
 
 class TkWindow:
+    _interpreter = None
+
     def __init__(self):
         import tkinter as tk
 
-        self.root = tk.Tk()
+        if TkWindow._interpreter is None:
+            TkWindow._interpreter = tk.Tk()
+            TkWindow._interpreter.withdraw()
+        self.root = tk.Toplevel(TkWindow._interpreter)
         self.root.title("GigaDictate test target")
         self.root.geometry("600x300+100+100")
         self.text = tk.Text(self.root)
