@@ -219,7 +219,7 @@ class Injector:
                 if child and class_name(child, name, len(name)) and name.value == "_WwG":
                     return WordDraft.open(target)
 
-            return Draft.open(target) or AccessibleDraft.open(target)
+            return Draft.open(target) or AccessibleDraft.open(target, self._paste)
         return None
 
     def typing_focus(self, target):

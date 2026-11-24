@@ -127,12 +127,13 @@ class AccessibleDraft:
         return (tuple(control.GetRuntimeId()), current, start, start + len(selected.GetText())), value, text
 
     @classmethod
-    def open(cls, target):
+    def open(cls, target, paste):
         try:
             import uiautomation as uia
             with uia.UIAutomationInitializerInThread():
                 state, _, _ = cls.inspect(target)
                 draft = cls()
+                draft.paste = paste
                 draft.target = target
                 draft.expected = state
                 _, value, draft.start, end = state
@@ -151,19 +152,42 @@ class AccessibleDraft:
                 ident, current, _, end = state
                 replacement = self.original if restore else text
                 updated = current[:self.start] + replacement + current[end:]
-                if updated != current:
-                    field.SetValue(updated, 0)
-                if field.Value != updated or self.inspect(self.target)[0][0] != ident:
+                if updated == current and not restore:
+                    return True
+                # Chromium may expose ValuePattern but ignore SetValue for contenteditable.
+                # Replace only the verified range using the editor's normal paste command.
+                selected, = pattern.GetSelection()
+                if self.start < state[2]:
+                    selected.MoveEndpointByUnit(0, 0, self.start - state[2], 0)
+                if selected.GetText() != current[self.start:end]:
                     return False
-                caret = self.start + len(replacement)
-                selection = pattern.DocumentRange
-                selection.MoveEndpointByRange(1, selection, 0, 0)
-                selection.MoveEndpointByUnit(1, 0, caret, 0)
-                selection.MoveEndpointByRange(0, selection, 1, 0)
-                if restore:
-                    selection.MoveEndpointByUnit(0, 0, -len(replacement), 0)
-                selection.Select(0)
-                self.expected = (ident, updated, self.start if restore else caret, caret)
+                selected.Select(0)
+                now, _, _ = self.inspect(self.target)
+                if now != (ident, current, self.start, end):
+                    return False
+                if updated != current:
+                    if replacement:
+                        if not self.paste(replacement):
+                            return False
+                    else:
+                        from .inject import _key, send_inputs
+                        if not send_inputs([_key(8), _key(8, flags=api.KEYEVENTF_KEYUP)]):
+                            return False
+                import time
+                deadline = time.monotonic() + 0.5
+                while True:
+                    actual, _, pattern = self.inspect(self.target)
+                    if (actual[0] == ident and actual[1].replace("\xa0", " ") == updated.replace("\xa0", " ")
+                            and actual[2] == actual[3] == self.start + len(replacement)):
+                        break
+                    if time.monotonic() >= deadline:
+                        return False
+                    time.sleep(0.02)
+                self.expected = actual
+                if restore and replacement:
+                    selected, = pattern.GetSelection()
+                    selected.MoveEndpointByUnit(0, 0, -len(replacement), 0)
+                    selected.Select(0)
                 return True
         except Exception:
             return False
