@@ -184,3 +184,32 @@ def test_browser_message_field(app):
         assert value.startswith("Черновик:") and value.count("15:30") == 1
         assert get_clipboard_text() == "исходный буфер"
         browser.close()
+
+
+def test_word_document_if_installed(app):
+    import winreg
+    from comtypes.client import CreateObject
+    from test_windows import force_foreground
+
+    try:
+        winreg.CloseKey(winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, r"Word.Application\CLSID"))
+    except FileNotFoundError:
+        pytest.skip("Microsoft Word is not installed on this Windows machine")
+    office = CreateObject("Word.Application", dynamic=True)
+    try:
+        office.Visible = True
+        doc = office.Documents.Add()
+        office.Activate()
+        force_foreground(office.ActiveWindow.Hwnd)
+        raw_key(api.VK_RCONTROL)
+        try:
+            time.sleep(4.8)
+        finally:
+            raw_key(api.VK_RCONTROL, up=True)
+        deadline = time.monotonic() + 20
+        while "15:30" not in doc.Content.Text:
+            assert time.monotonic() < deadline
+            time.sleep(0.1)
+        assert doc.Content.Text.count("15:30") == 1
+    finally:
+        office.Quit(0)

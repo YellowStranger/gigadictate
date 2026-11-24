@@ -209,13 +209,16 @@ class Injector:
         return _root(api.GetForegroundWindow())
 
     def begin_draft(self, target):
-        from .draft import AccessibleDraft, Draft, class_name
+        from .draft import AccessibleDraft, Draft, class_name, focused
         from .word import WordDraft
         if target and (self.self_elevated or not window_is_elevated(target)):
             name = ctypes.create_unicode_buffer(128)
             class_name(target, name, len(name))
             if name.value == "OpusApp":
-                return WordDraft.open(target)
+                child = focused(target)
+                if child and class_name(child, name, len(name)) and name.value == "_WwG":
+                    return WordDraft.open(target)
+
             return Draft.open(target) or AccessibleDraft.open(target)
         return None
 
