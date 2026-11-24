@@ -120,6 +120,8 @@ class Controller:
                     session.preview_pending = False
                     if session is self.session and text:
                         if session.draft and not session.draft.replace(text):
+                            if getattr(session.draft, "pristine", lambda: False)():
+                                session.deferred_focus = self.injector.typing_focus(session.target)
                             session.draft = None
                         if not session.draft and not session.deferred_focus:
                             self.ui.preview(text)
@@ -317,6 +319,9 @@ class Controller:
             return
         if s.draft and s.draft.replace(text):
             reason = ""
+        elif s.draft and getattr(s.draft, "pristine", lambda: False)():
+            focus = self.injector.typing_focus(s.target)
+            reason = self.injector.insert(text, s.target, focus=focus) if focus else self.injector.clipboard(text)
         elif s.deferred_focus:
             reason = self.injector.insert(text, s.target, focus=s.deferred_focus)
         else:

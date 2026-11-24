@@ -135,12 +135,23 @@ class AccessibleDraft:
                 draft = cls()
                 draft.paste = paste
                 draft.target = target
+                draft.initial = state
                 draft.expected = state
                 _, value, draft.start, end = state
                 draft.original = value[draft.start:end]
                 return draft
         except Exception:
             return None
+
+    def pristine(self):
+        # A provider can advertise editable ranges but refuse updates. Ordinary
+        # typing is safe only if the original text, selection and identity survived.
+        try:
+            import uiautomation as uia
+            with uia.UIAutomationInitializerInThread():
+                return self.inspect(self.target)[0] == self.initial
+        except Exception:
+            return False
 
     def replace(self, text, restore=False):
         try:

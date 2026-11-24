@@ -203,7 +203,10 @@ def test_browser_message_field(app):
                                timeout=20000)
         value = editor.inner_text()
         assert value.startswith("Черновик:") and value.count("15:30") == 1
-        assert get_clipboard_text() == "исходный буфер"
+        deadline = time.monotonic() + 5
+        while get_clipboard_text() != "исходный буфер":
+            assert time.monotonic() < deadline, "clipboard did not return to its initial state"
+            time.sleep(0.05)
         browser.close()
 
 
