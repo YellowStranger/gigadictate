@@ -128,6 +128,16 @@ def test_hold_to_talk_types_text(app):
         win.text.focus_force()
         win.pump(0.1)
 
+        # Tk text accepts Unicode typing but exposes no replaceable native EDIT range.
+        from gigadictate.win.inject import set_clipboard_text
+        set_clipboard_text("исходный буфер")
+        raw_key(api.VK_RCONTROL)
+        win.pump(4.7)
+        raw_key(api.VK_RCONTROL, up=True)
+        assert win.wait_text(lambda v: "15:30" in v, 15), win.value
+        assert get_clipboard_text() == "исходный буфер"
+        win.text.delete("1.0", "end")
+
         # a shortcut with the hotkey (Right Ctrl + A) is not a dictation
         win.text.insert("1.0", "abc")
         raw_key(api.VK_RCONTROL)
@@ -148,3 +158,29 @@ def test_resources(app):
     print(f"\nRAM: working set {ws:.0f} MB, private {private:.0f} MB; idle CPU {idle_cpu:.2f}% of one core")
     assert idle_cpu < 1.0
     assert private < 900
+
+
+def test_browser_message_field(app):
+    from playwright.sync_api import sync_playwright
+    from gigadictate.win.inject import get_clipboard_text, set_clipboard_text
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(channel="msedge", headless=False)
+        page = browser.new_page()
+        page.set_content('<div role="textbox" aria-label="Сообщение" contenteditable="true">Черновик: </div>')
+        page.bring_to_front()
+        editor = page.get_by_role("textbox")
+        editor.click()
+        editor.press("End")
+        set_clipboard_text("исходный буфер")
+        raw_key(api.VK_RCONTROL)
+        try:
+            page.wait_for_timeout(4800)
+        finally:
+            raw_key(api.VK_RCONTROL, up=True)
+        page.wait_for_function('document.querySelector("[contenteditable]").innerText.includes("15:30")',
+                               timeout=20000)
+        value = editor.inner_text()
+        assert value.startswith("Черновик:") and value.count("15:30") == 1
+        assert get_clipboard_text() == "исходный буфер"
+        browser.close()

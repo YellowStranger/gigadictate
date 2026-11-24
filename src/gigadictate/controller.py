@@ -46,6 +46,7 @@ class Session:
     n_segments: int = 0
     samples: int = 0
     draft: Any = None
+    deferred_focus: Any = None
     last_preview: int = 0
     preview_pending: bool = False
     peak: float = 0.0
@@ -120,7 +121,7 @@ class Controller:
                     if session is self.session and text:
                         if session.draft and not session.draft.replace(text):
                             session.draft = None
-                        if not session.draft:
+                        if not session.draft and not session.deferred_focus:
                             self.ui.preview(text)
                 elif cmd:
                     getattr(self, f"_do_{cmd}")()
@@ -140,6 +141,7 @@ class Controller:
             return
         if not self.engine.loaded:
             self.jobs.put(("load", None, None))  # warm up while the user speaks
+        target = self.injector.foreground()
         rec = self.recorder_factory()
         try:
             rec.start()
@@ -149,10 +151,12 @@ class Controller:
             self.ui.play("error")
             self.ui.notify("Нет микрофона", f"{e}\nПроверьте, что микрофон подключён и выбран в Параметрах звука.", True)
             return
-        self.session = Session(target=self.injector.foreground(), t0=self.clock(), recorder=rec)
+        self.session = Session(target=target, t0=self.clock(), recorder=rec)
         self.ui.set_state("recording")
         self.session.draft = self.injector.begin_draft(self.session.target)
         if not self.session.draft:
+            self.session.deferred_focus = self.injector.typing_focus(target)
+        if not self.session.draft and not self.session.deferred_focus:
             self.ui.preview("Слушаю…")
         if self.cfg.sounds:
             self.ui.play("start")
@@ -308,7 +312,12 @@ class Controller:
             else:
                 self.ui.notify("Речь не распознана", "Попробуйте говорить ближе к микрофону.")
             return
-        reason = "" if s.draft and s.draft.replace(text) else self.injector.clipboard(text)
+        if s.draft and s.draft.replace(text):
+            reason = ""
+        elif s.deferred_focus:
+            reason = self.injector.insert(text, s.target, focus=s.deferred_focus)
+        else:
+            reason = self.injector.clipboard(text)
         self.inserted.append(text)
         del self.inserted[:-5]
         if reason:

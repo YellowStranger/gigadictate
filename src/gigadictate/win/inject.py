@@ -214,22 +214,52 @@ class Injector:
             return Draft.open(target) or AccessibleDraft.open(target)
         return None
 
+    def typing_focus(self, target):
+        # Custom editor surfaces can accept ordinary keyboard input even when
+        # they expose no editable document range to Windows accessibility.
+        from .draft import focused, class_name, style
+        hwnd = focused(target)
+        if not hwnd or (not self.self_elevated and window_is_elevated(target)):
+            return None
+        buf = ctypes.create_unicode_buffer(128)
+        class_name(hwnd, buf, len(buf))
+        name = buf.value.lower()
+        if name in {"button", "static", "listbox", "systreeview32", "syslistview32",
+                    "toolbarwindow32", "shell_traywnd", "progman", "workerw"}:
+            return None
+        if (name == "edit" or name.startswith("richedit")) and style(hwnd, -16) & (0x20 | 0x800):
+            return None
+        try:
+            import uiautomation as uia
+            with uia.UIAutomationInitializerInThread():
+                control = uia.GetFocusedControl()
+                if control and (control.IsPassword or control.ControlTypeName in {
+                        "ButtonControl", "MenuItemControl", "CheckBoxControl", "RadioButtonControl",
+                        "ToolBarControl", "HyperlinkControl", "ListItemControl"}):
+                    return None
+                identity = tuple(control.GetRuntimeId()) if control else ()
+        except Exception:
+            identity = ()
+        return hwnd, identity
+
     def clipboard(self, text):
         set_clipboard_text(text)
         return "Текст готов."
 
-    def insert(self, text: str, target) -> str:
+    def insert(self, text: str, target, *, focus=None) -> str:
         fg = _root(api.GetForegroundWindow())
         reason = ""
-        if not fg:
+        if not fg or not target:
             reason = "Нет активного окна для вставки."
-        elif target and fg != target and api.IsWindow(target):
+        elif fg != target:
             reason = "Пока шло распознавание, вы переключились в другое окно."
         elif not self.self_elevated and window_is_elevated(fg):
             reason = ("Окно запущено от имени администратора, Windows не даёт обычным программам вводить в него текст. "
                       "Текст в буфере обмена — вставьте его через Ctrl+V.")
         elif not wait_modifiers_released():
             reason = "Были зажаты Ctrl/Alt/Shift/Win — печатать в этот момент небезопасно."
+        elif self.foreground() != target or (focus and self.typing_focus(target) != focus):
+            reason = "Поле ввода изменилось."
         if reason:
             set_clipboard_text(text)
             return reason

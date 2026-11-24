@@ -42,6 +42,9 @@ class FakeInjector:
     def foreground(self):
         return "window-1"
 
+    def typing_focus(self, target):
+        return None
+
     def begin_draft(self, target):
         return None
 
