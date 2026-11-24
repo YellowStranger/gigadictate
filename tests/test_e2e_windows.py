@@ -173,8 +173,21 @@ def test_browser_message_field(app):
         from test_windows import force_foreground
         user32 = ctypes.windll.user32
         user32.FindWindowW.restype = wt.HWND
-        hwnd = user32.FindWindowW("Chrome_WidgetWin_1", "GigaDictate browser test - Google Chrome")
-        assert hwnd, "Chrome window not found"
+        processes = browser.new_browser_cdp_session().send("SystemInfo.getProcessInfo")["processInfo"]
+        browser_pid = next(item["id"] for item in processes if item["type"] == "browser")
+        windows = []
+        @ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
+        def collect(handle, _):
+            pid = wt.DWORD()
+            api.GetWindowThreadProcessId(handle, ctypes.byref(pid))
+            name = ctypes.create_unicode_buffer(128)
+            user32.GetClassNameW(wt.HWND(handle), name, 128)
+            if pid.value == browser_pid and name.value == "Chrome_WidgetWin_1" and user32.IsWindowVisible(wt.HWND(handle)):
+                windows.append(handle)
+            return True
+        user32.EnumWindows(collect, 0)
+        assert windows, "Chrome window not found"
+        hwnd = windows[0]
         force_foreground(hwnd)
         assert api.GetForegroundWindow() == hwnd
         editor = page.get_by_role("textbox")
