@@ -1,5 +1,6 @@
 """Replace a guarded selection in a native Windows text control, including while Ctrl is held."""
 import ctypes as c
+import logging
 from ctypes import wintypes as w
 
 from . import api
@@ -159,6 +160,7 @@ class AccessibleDraft:
             with uia.UIAutomationInitializerInThread():
                 state, field, pattern = self.inspect(self.target)
                 if state != self.expected:
+                    logging.getLogger(__name__).info("draft update: field state changed")
                     return False
                 ident, current, _, end = state
                 replacement = self.original if restore else text
@@ -171,14 +173,17 @@ class AccessibleDraft:
                 if self.start < state[2]:
                     selected.MoveEndpointByUnit(0, 0, self.start - state[2], 0)
                 if selected.GetText() != current[self.start:end]:
+                    logging.getLogger(__name__).info("draft update: range mismatch")
                     return False
                 selected.Select(0)
                 now, _, _ = self.inspect(self.target)
                 if now != (ident, current, self.start, end):
+                    logging.getLogger(__name__).info("draft update: selection not applied")
                     return False
                 if updated != current:
                     if replacement:
                         if not self.paste(replacement):
+                            logging.getLogger(__name__).info("draft update: paste unavailable")
                             return False
                     else:
                         from .inject import _key, send_inputs
@@ -192,6 +197,7 @@ class AccessibleDraft:
                             and actual[2] == actual[3] == self.start + len(replacement)):
                         break
                     if time.monotonic() >= deadline:
+                        logging.getLogger(__name__).info("draft update: paste not confirmed")
                         return False
                     time.sleep(0.02)
                 self.expected = actual
@@ -200,5 +206,6 @@ class AccessibleDraft:
                     selected.MoveEndpointByUnit(0, 0, -len(replacement), 0)
                     selected.Select(0)
                 return True
-        except Exception:
+        except Exception as exc:
+            logging.getLogger(__name__).info("draft provider error: %s", type(exc).__name__)
             return False
