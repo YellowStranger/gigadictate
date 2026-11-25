@@ -219,7 +219,8 @@ class Injector:
                 if child and class_name(child, name, len(name)) and name.value == "_WwG":
                     return WordDraft.open(target)
 
-            return Draft.open(target) or AccessibleDraft.open(target, self._paste)
+            return Draft.open(target) or AccessibleDraft.open(
+                target, self._paste, timeout=1.0 if name.value == "Chrome_WidgetWin_1" else 0)
         return None
 
     def typing_focus(self, target):

@@ -112,7 +112,7 @@ class AccessibleDraft:
         if api.GetForegroundWindow() != target:
             raise ValueError("Фокус изменился")
         control = uia.GetFocusedControl()
-        if not control or control.IsPassword or control.ControlType != uia.ControlType.EditControl:
+        if not control or control.IsPassword or control.ControlType not in (uia.ControlType.EditControl, uia.ControlType.DocumentControl):
             raise ValueError("Нет доступного поля")
         value = control.GetPattern(uia.PatternId.ValuePattern)
         text = control.GetPattern(uia.PatternId.TextPattern)
@@ -120,7 +120,7 @@ class AccessibleDraft:
             raise ValueError("Поле не поддерживает редактирование")
         document = text.DocumentRange
         current = document.GetText(65537)
-        if len(current) > 65536 or current.replace("\xa0", " ") != value.Value.replace("\xa0", " "):
+        if len(current) > 65536:
             raise ValueError("Нет доступного текстового диапазона")
         selected, = text.GetSelection()
         prefix = document.Clone()
@@ -129,11 +129,19 @@ class AccessibleDraft:
         return (tuple(control.GetRuntimeId()), current, start, start + len(selected.GetText())), value, text
 
     @classmethod
-    def open(cls, target, paste):
+    def open(cls, target, paste, timeout=0):
         try:
             import uiautomation as uia
             with uia.UIAutomationInitializerInThread():
-                state, _, _ = cls.inspect(target)
+                deadline = time.monotonic() + timeout
+                while True:
+                    try:
+                        state, _, _ = cls.inspect(target)
+                        break
+                    except Exception:
+                        if api.GetForegroundWindow() != target or time.monotonic() >= deadline:
+                            raise
+                        time.sleep(0.05)
                 draft = cls()
                 draft.paste = paste
                 draft.target = target
