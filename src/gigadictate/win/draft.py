@@ -1,6 +1,7 @@
 """Replace a guarded selection in a native Windows text control, including while Ctrl is held."""
 import ctypes as c
 import logging
+import time
 from ctypes import wintypes as w
 
 from . import api
@@ -175,11 +176,18 @@ class AccessibleDraft:
                 if selected.GetText() != current[self.start:end]:
                     logging.getLogger(__name__).info("draft update: range mismatch")
                     return False
-                selected.Select(0)
-                now, _, _ = self.inspect(self.target)
-                if now != (ident, current, self.start, end):
-                    logging.getLogger(__name__).info("draft update: selection not applied")
-                    return False
+                if state[2] != self.start:
+                    selected.Select(0)
+                    deadline = time.monotonic() + 0.75
+                    while True:
+                        now, _, _ = self.inspect(self.target)
+                        if now == (ident, current, self.start, end):
+                            break
+                        if now != state or time.monotonic() >= deadline:
+                            logging.getLogger(__name__).info("draft selection mismatch: expected %s:%s, got %s:%s",
+                                                             self.start, end, now[2], now[3])
+                            return False
+                        time.sleep(0.025)
                 if updated != current:
                     if replacement:
                         if not self.paste(replacement):
@@ -189,7 +197,6 @@ class AccessibleDraft:
                         from .inject import _key, send_inputs
                         if not send_inputs([_key(8), _key(8, flags=api.KEYEVENTF_KEYUP)]):
                             return False
-                import time
                 deadline = time.monotonic() + 0.5
                 while True:
                     actual, _, pattern = self.inspect(self.target)

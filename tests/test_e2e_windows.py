@@ -196,7 +196,9 @@ def test_browser_message_field(app):
         set_clipboard_text("исходный буфер")
         raw_key(api.VK_RCONTROL)
         try:
-            page.wait_for_timeout(4800)
+            page.wait_for_function('document.querySelector("[contenteditable]").innerText.includes("диктовки")',
+                                   timeout=15000)
+            page.wait_for_timeout(2600)
         finally:
             raw_key(api.VK_RCONTROL, up=True)
         page.wait_for_function('document.querySelector("[contenteditable]").innerText.includes("15:30")',
