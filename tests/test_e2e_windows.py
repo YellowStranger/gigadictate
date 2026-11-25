@@ -42,11 +42,11 @@ def proc_stats(pid):
 
 
 @pytest.fixture
-def app(tmp_path):
+def app(tmp_path, request):
     home = tmp_path / "home"
     home.mkdir()
     (home / "config.json").write_text('{"welcomed": true, "sounds": false}', "utf-8")
-    env = dict(os.environ, GIGADICTATE_HOME=str(home), GIGADICTATE_FAKE_MIC=str(DATA / "short.wav"),
+    env = dict(os.environ, GIGADICTATE_HOME=str(home), GIGADICTATE_FAKE_MIC=str(DATA / getattr(request, "param", "short.wav")),
                GIGADICTATE_TEST_HOOK="1")
     exe = os.environ.get("GIGADICTATE_EXE")
     if exe:
@@ -161,7 +161,8 @@ def test_resources(app):
     assert private < 900
 
 
-@pytest.mark.parametrize("live_ranges", [False, True], ids=["default", "renderer-accessibility"])
+@pytest.mark.parametrize("app, live_ranges", [("short.wav", False), ("long.wav", True)],
+                         indirect=["app"], ids=["default", "multiple-phrases"])
 def test_browser_message_field(app, live_ranges):
     from playwright.sync_api import sync_playwright
     from gigadictate.win.inject import get_clipboard_text, set_clipboard_text
@@ -200,21 +201,23 @@ def test_browser_message_field(app, live_ranges):
         raw_key(api.VK_RCONTROL)
         try:
             if live_ranges:
-                page.wait_for_function('document.querySelector("[contenteditable]").innerText.includes("диктовки")',
-                                       timeout=15000)
-                page.wait_for_timeout(2600)
+                for marker in ["длинная", "пользователь", "клавиши"]:
+                    page.wait_for_function('(word) => document.querySelector("[contenteditable]").innerText.toLowerCase().includes(word)',
+                                           arg=marker, timeout=20000)
+                assert editor.inner_text().lower().count("длинная") == 1
             else:
                 page.wait_for_timeout(4800)
         finally:
             raw_key(api.VK_RCONTROL, up=True)
-        page.wait_for_function('document.querySelector("[contenteditable]").innerText.includes("15:30")',
-                               timeout=20000)
+        marker = "клавиши" if live_ranges else "15:30"
+        page.wait_for_function('(word) => document.querySelector("[contenteditable]").innerText.toLowerCase().includes(word)',
+                               arg=marker, timeout=20000)
         deadline = time.monotonic() + 10
         while "dictation committed to editor" not in app.log.read_text("utf-8", "replace"):
             assert time.monotonic() < deadline, "final result did not reach the browser field"
             time.sleep(0.05)
         value = editor.inner_text()
-        assert value.startswith("Черновик:") and value.count("15:30") == 1
+        assert value.startswith("Черновик:") and value.lower().count(marker) == 1
         deadline = time.monotonic() + 5
         while get_clipboard_text() != "исходный буфер":
             assert time.monotonic() < deadline, "clipboard did not return to its initial state"

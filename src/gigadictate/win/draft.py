@@ -3,6 +3,7 @@ import ctypes as c
 import logging
 import time
 from ctypes import wintypes as w
+from os.path import commonprefix
 
 from . import api
 
@@ -146,6 +147,7 @@ class AccessibleDraft:
                 draft.paste = paste
                 draft.target = target
                 draft.initial = state
+                draft.pending = None
                 draft.expected = state
                 _, value, draft.start, end = state
                 draft.original = value[draft.start:end]
@@ -168,7 +170,14 @@ class AccessibleDraft:
             import uiautomation as uia
             with uia.UIAutomationInitializerInThread():
                 state, field, pattern = self.inspect(self.target)
-                if state != self.expected:
+                def same_state(left, right):
+                    return (left[0] == right[0] and left[2:] == right[2:]
+                            and left[1].replace("\xa0", " ") == right[1].replace("\xa0", " "))
+
+                if self.pending and same_state(state, self.pending):
+                    self.expected = state
+                    self.pending = None
+                if not same_state(state, self.expected):
                     logging.getLogger(__name__).info("draft update: field state changed")
                     return False
                 ident, current, _, end = state
@@ -178,27 +187,35 @@ class AccessibleDraft:
                     return True
                 # Chromium may expose ValuePattern but ignore SetValue for contenteditable.
                 # Replace only the verified range using the editor's normal paste command.
+                # Most results extend the previous hypothesis. Keep its confirmed
+                # prefix in place and select only the suffix the model revised.
+                old = current[self.start:end].replace("\xa0", " ")
+                keep = (len(commonprefix([old, replacement])) if not restore
+                        and state[2] == end else 0)
+                edit_start = self.start + keep
                 selected, = pattern.GetSelection()
-                if self.start < state[2]:
-                    selected.MoveEndpointByUnit(0, 0, self.start - state[2], 0)
-                if selected.GetText() != current[self.start:end]:
+                if edit_start < state[2]:
+                    selected.MoveEndpointByUnit(0, 0, edit_start - state[2], 0)
+                if selected.GetText().replace("\xa0", " ") != current[edit_start:end].replace("\xa0", " "):
                     logging.getLogger(__name__).info("draft update: range mismatch")
                     return False
-                if state[2] != self.start:
+                if state[2] != edit_start:
                     selected.Select(0)
                     deadline = time.monotonic() + 0.75
                     while True:
                         now, _, _ = self.inspect(self.target)
-                        if now == (ident, current, self.start, end):
+                        if same_state(now, (ident, current, edit_start, end)):
                             break
-                        if now != state or time.monotonic() >= deadline:
+                        if not same_state(now, state) or time.monotonic() >= deadline:
                             logging.getLogger(__name__).info("draft selection mismatch: expected %s:%s, got %s:%s",
-                                                             self.start, end, now[2], now[3])
+                                                             edit_start, end, now[2], now[3])
                             return False
                         time.sleep(0.025)
                 if updated != current:
-                    if replacement:
-                        if not self.paste(replacement):
+                    caret = self.start + len(replacement)
+                    self.pending = (ident, updated, caret, caret)
+                    if replacement[keep:]:
+                        if not self.paste(replacement[keep:]):
                             logging.getLogger(__name__).info("draft update: paste unavailable")
                             return False
                     else:
@@ -215,6 +232,7 @@ class AccessibleDraft:
                         logging.getLogger(__name__).info("draft update: paste not confirmed")
                         return False
                     time.sleep(0.02)
+                self.pending = None
                 self.expected = actual
                 if restore and replacement:
                     selected, = pattern.GetSelection()

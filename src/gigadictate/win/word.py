@@ -1,5 +1,6 @@
 """Word's document canvas exposes editable ranges through its own automation API."""
 from contextlib import contextmanager
+from os.path import commonprefix
 
 
 @contextmanager
@@ -47,7 +48,10 @@ class WordDraft:
                     return False
                 updated = "" if restore else text.replace("\n", "\r")
                 if self.text != updated:
-                    span.Text = updated
+                    keep = len(commonprefix([self.text, updated]))
+                    # Word offsets are UTF-16 code units. Preserve the stable prefix.
+                    span.SetRange(self.start + len(updated[:keep].encode("utf-16-le")) // 2, self.end)
+                    span.Text = updated[keep:]
                     selection.SetRange(span.End, span.End)
                     self.end = span.End
                     self.text = updated

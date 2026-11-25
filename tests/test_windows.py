@@ -237,3 +237,21 @@ def test_waits_for_modifier_release(win):
     assert inj.insert("абв", inj.foreground()) == ""
     assert time.monotonic() - t >= 0.35  # did not type while Ctrl was held (would be Ctrl+letters)
     assert win.wait_text(lambda v: v == "абв", 5)
+
+
+def test_rapid_start_stop_cues_play_in_order(tmp_path, monkeypatch):
+    import queue
+    import winsound
+    from gigadictate.win.tray import Tray
+
+    tray = Tray.__new__(Tray)
+    tray._sound_dir = tmp_path
+    tray._sounds = queue.Queue()
+    played = []
+    monkeypatch.setattr(winsound, "PlaySound", lambda path, flags: played.append((path, flags)))
+    tray.play("start")
+    tray.play("stop")
+    tray._sounds.put(None)
+    tray._play_sounds()
+    assert [path for path, _ in played] == [str(tmp_path / f"{name}.wav") for name in ("start", "stop")]
+    assert all(not flags & winsound.SND_ASYNC for _, flags in played)

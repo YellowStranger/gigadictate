@@ -62,6 +62,7 @@ class Tray:
             data = assets.icon_resource(assets.render_icon_rgba(size, color))
             buf = ctypes.create_string_buffer(data, len(data))
             self.icons[name] = api.CreateIconFromResourceEx(buf, len(data), True, 0x00030000, size, size, 0)
+        self._sounds = queue.Queue()
         self._sound_dir = Path(tempfile.gettempdir()) / "GigaDictate"
         self._sound_dir.mkdir(exist_ok=True)
         for name, (freqs, dur) in assets.SOUNDS.items():
@@ -69,6 +70,7 @@ class Tray:
             data = assets.tone_wav(freqs, dur)
             if not p.exists() or p.read_bytes() != data:
                 p.write_bytes(data)
+        threading.Thread(target=self._play_sounds, daemon=True, name="audio-cues").start()
         from .preview import Preview
         self.caption = Preview(self.hwnd, hinst)
         self._add_icon()
@@ -90,13 +92,20 @@ class Tray:
         self.call(lambda: self._balloon(title, text, error))
 
     def play(self, sound: str) -> None:
-        try:
-            import winsound
+        self._sounds.put(sound)
 
-            winsound.PlaySound(str(self._sound_dir / f"{sound}.wav"),
-                               winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
-        except Exception as e:
-            log.debug("sound: %s", e)
+    def _play_sounds(self):
+        import winsound
+        while (sound := self._sounds.get()) is not None:
+            try:
+                winsound.PlaySound(str(self._sound_dir / f"{sound}.wav"),
+                                   winsound.SND_FILENAME | winsound.SND_NODEFAULT)
+            except RuntimeError:
+                log.warning("Windows could not play the %s cue", sound)
+                try:
+                    winsound.MessageBeep()
+                except RuntimeError:
+                    log.warning("System notification sound unavailable")
 
     def call(self, fn: Callable[[], None]) -> None:
         """Run fn on the tray (main) thread."""
@@ -213,6 +222,7 @@ class Tray:
                 api.DestroyWindow(hwnd)
                 return 0
             if msg == api.WM_DESTROY:
+                self._sounds.put(None)
                 api.PostQuitMessage(0)
                 return 0
         except Exception:

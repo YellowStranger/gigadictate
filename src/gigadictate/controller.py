@@ -119,7 +119,7 @@ class Controller:
                     session, text = cmd
                     session.preview_pending = False
                     if session is self.session and text:
-                        if session.draft and not session.draft.replace(text):
+                        if session.draft and not self._update_draft(session, text):
                             if getattr(session.draft, "pristine", lambda: False)():
                                 session.deferred_focus = self.injector.typing_focus(session.target)
                             session.draft = None
@@ -131,6 +131,18 @@ class Controller:
                 self._maybe_unload()
             except Exception:
                 log.exception("control loop error")
+
+    def _update_draft(self, session, text):
+        # Accessibility providers publish text, focus and selection separately.
+        # Each retry must pass the draft's original identity/content/caret checks.
+        for delay in (0, 0.075, 0.18):
+            if delay:
+                if self.injector.foreground() != session.target:
+                    return False
+                time.sleep(delay)
+            if session.draft.replace(text):
+                return True
+        return False
 
     def step(self, cmd: str | None = None) -> None:
         """Synchronous variant of one control-loop iteration (unit tests)."""
@@ -153,6 +165,8 @@ class Controller:
             self.ui.play("error")
             self.ui.notify("Нет микрофона", f"{e}\nПроверьте, что микрофон подключён и выбран в Параметрах звука.", True)
             return
+        if self.cfg.sounds:
+            self.ui.play("start")
         self.session = Session(target=target, t0=self.clock(), recorder=rec)
         self.ui.set_state("recording")
         self.session.draft = self.injector.begin_draft(self.session.target)
@@ -163,8 +177,6 @@ class Controller:
                  ("typing" if self.session.deferred_focus else "clipboard"))
         if not self.session.draft and not self.session.deferred_focus:
             self.ui.preview("Слушаю…")
-        if self.cfg.sounds:
-            self.ui.play("start")
 
     def _do_stop(self) -> None:
         s = self.session
@@ -317,7 +329,7 @@ class Controller:
             else:
                 self.ui.notify("Речь не распознана", "Попробуйте говорить ближе к микрофону.")
             return
-        if s.draft and s.draft.replace(text):
+        if s.draft and self._update_draft(s, text):
             reason = ""
         elif s.draft and getattr(s.draft, "pristine", lambda: False)():
             focus = self.injector.typing_focus(s.target)
