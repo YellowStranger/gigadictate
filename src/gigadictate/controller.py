@@ -212,7 +212,11 @@ class Controller:
         s = self.session
         if s is None:
             return
-        self._feed(s, s.recorder.read())
+        chunk = s.recorder.read()
+        self._feed(s, chunk)
+        if len(chunk) and (s.draft or s.deferred_focus):
+            level = min(3, int(float(np.abs(chunk).mean()) * 90))
+            self.ui.indicator(s.target, level, getattr(s.draft, "anchor", None))
         if (not s.preview_pending and s.samples - s.last_preview >= SR * 2
                 and len(s.segmenter) and self.jobs.empty()):
             s.preview_pending = True

@@ -21,6 +21,9 @@ class FakeUI:
     def __init__(self):
         self.states, self.notes, self.sounds = [], [], []
 
+    def indicator(self, target, level, anchor):
+        pass
+
     def preview(self, text):
         self.draft = text
 

@@ -73,6 +73,7 @@ class Tray:
         threading.Thread(target=self._play_sounds, daemon=True, name="audio-cues").start()
         from .preview import Preview
         self.caption = Preview(self.hwnd, hinst)
+        self.badge = Preview(self.hwnd, hinst, compact=True)
         self._add_icon()
 
     # ---------------------------------------------------------------- UI protocol (any thread)
@@ -80,8 +81,14 @@ class Tray:
         self.state = state
         api.PostMessageW(self.hwnd, WM_REFRESH, 0, 0)
 
+    def indicator(self, target, level, anchor):
+        self.call(lambda: self.badge.meter(target, level, anchor))
+
     def preview(self, text: str) -> None:
-        self.call(lambda: self.caption.update(text))
+        def update():
+            self.badge.update("")
+            self.caption.update(text)
+        self.call(update)
 
     def set_hint(self, hint: str) -> None:
         self.hint = hint

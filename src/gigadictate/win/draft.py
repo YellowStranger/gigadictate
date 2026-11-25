@@ -113,7 +113,7 @@ class AccessibleDraft:
         if api.GetForegroundWindow() != target:
             raise ValueError("Фокус изменился")
         control = uia.GetFocusedControl()
-        if not control or control.IsPassword or control.ControlType not in (uia.ControlType.EditControl, uia.ControlType.DocumentControl):
+        if not control or control.IsPassword or control.ControlType not in (uia.ControlType.EditControl, uia.ControlType.DocumentControl, uia.ControlType.ComboBoxControl):
             raise ValueError("Нет доступного поля")
         value = control.GetPattern(uia.PatternId.ValuePattern)
         text = control.GetPattern(uia.PatternId.TextPattern)
@@ -137,7 +137,7 @@ class AccessibleDraft:
                 deadline = time.monotonic() + timeout
                 while True:
                     try:
-                        state, _, _ = cls.inspect(target)
+                        state, _, pattern = cls.inspect(target)
                         break
                     except Exception:
                         if api.GetForegroundWindow() != target or time.monotonic() >= deadline:
@@ -146,12 +146,28 @@ class AccessibleDraft:
                 draft = cls()
                 draft.paste = paste
                 draft.target = target
+                draft.chrome = timeout > 0
+                draft.anchor = cls.location(pattern, uia.GetFocusedControl())
                 draft.initial = state
                 draft.pending = None
                 draft.expected = state
                 _, value, draft.start, end = state
                 draft.original = value[draft.start:end]
                 return draft
+        except Exception:
+            return None
+
+    @staticmethod
+    def location(pattern, control):
+        try:
+            selected, = pattern.GetSelection()
+            rect = selected.textRange.GetBoundingRectangles()
+            if rect and len(rect) >= 4:
+                x, y, width, height = rect[-4:]
+                if height > 0:
+                    return int(x + width), int(y + height)
+            box = control.BoundingRectangle
+            return int(box.left + 8), int(box.bottom)
         except Exception:
             return None
 
@@ -174,7 +190,19 @@ class AccessibleDraft:
                     return (left[0] == right[0] and left[2:] == right[2:]
                             and left[1].replace("\xa0", " ") == right[1].replace("\xa0", " "))
 
-                if self.pending and same_state(state, self.pending):
+                def confirms(actual, intended):
+                    if same_state(actual, intended):
+                        return True
+                    # Chrome search can immediately extend our paste with a selected
+                    # suggestion. Only adopt that suffix if the complete intended
+                    # value precedes it, in the same control, at document end.
+                    ident, value, caret, end = intended
+                    aid, shown, left, right = actual
+                    return (self.chrome and aid == ident and caret == end == len(value)
+                            and left == caret < right == len(shown)
+                            and shown[:left].replace("\xa0", " ") == value.replace("\xa0", " "))
+
+                if self.pending and confirms(state, self.pending):
                     self.expected = state
                     self.pending = None
                 if not same_state(state, self.expected):
@@ -190,8 +218,8 @@ class AccessibleDraft:
                 # Most results extend the previous hypothesis. Keep its confirmed
                 # prefix in place and select only the suffix the model revised.
                 old = current[self.start:end].replace("\xa0", " ")
-                keep = (len(commonprefix([old, replacement])) if not restore
-                        and state[2] == end else 0)
+                keep = (len(commonprefix([old, replacement])) if not restore else 0)
+                keep = min(keep, state[2] - self.start)
                 edit_start = self.start + keep
                 selected, = pattern.GetSelection()
                 if edit_start < state[2]:
@@ -225,14 +253,14 @@ class AccessibleDraft:
                 deadline = time.monotonic() + 0.5
                 while True:
                     actual, _, pattern = self.inspect(self.target)
-                    if (actual[0] == ident and actual[1].replace("\xa0", " ") == updated.replace("\xa0", " ")
-                            and actual[2] == actual[3] == self.start + len(replacement)):
+                    if confirms(actual, (ident, updated, self.start + len(replacement), self.start + len(replacement))):
                         break
                     if time.monotonic() >= deadline:
                         logging.getLogger(__name__).info("draft update: paste not confirmed")
                         return False
                     time.sleep(0.02)
                 self.pending = None
+                self.anchor = self.location(pattern, uia.GetFocusedControl())
                 self.expected = actual
                 if restore and replacement:
                     selected, = pattern.GetSelection()

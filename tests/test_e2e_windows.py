@@ -161,15 +161,16 @@ def test_resources(app):
     assert private < 900
 
 
-@pytest.mark.parametrize("app, live_ranges", [("short.wav", False), ("long.wav", True)],
-                         indirect=["app"], ids=["default", "multiple-phrases"])
-def test_browser_message_field(app, live_ranges):
+@pytest.mark.parametrize("app, surface", [("short.wav", "default"), ("long.wav", "multiple-phrases"),
+                                        ("short.wav", "omnibox"), ("short.wav", "search")], indirect=["app"])
+def test_browser_message_field(app, surface):
+    live_ranges = surface != "default"
     from playwright.sync_api import sync_playwright
     from gigadictate.win.inject import get_clipboard_text, set_clipboard_text
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(channel="chrome", headless=False,
-                                             args=["--force-renderer-accessibility"] if live_ranges else [])
+                                             args=["--force-renderer-accessibility"] if surface == "multiple-phrases" else [])
         page = browser.new_page()
         page.set_content('<div role="textbox" aria-label="Сообщение" contenteditable="true">Черновик: </div>')
         page.evaluate("document.title = 'GigaDictate browser test'")
@@ -197,6 +198,48 @@ def test_browser_message_field(app, live_ranges):
         editor = page.get_by_role("textbox")
         editor.click()
         editor.press("End")
+        if surface in {"omnibox", "search"}:
+            if surface == "omnibox":
+                import uiautomation as uia
+                raw_key(api.VK_LCONTROL)
+                raw_key(0x4C)
+                raw_key(0x4C, up=True)
+                raw_key(api.VK_LCONTROL, up=True)
+                time.sleep(0.25)
+
+                def read_field():
+                    return uia.GetFocusedControl().GetPattern(uia.PatternId.ValuePattern).Value
+            else:
+                page.set_content("""<input type="search" aria-label="Поиск" oninput="
+                    if(this.value &amp;&amp; !this.value.endsWith(' ')){
+                        const n=this.value.length; this.value+=' подсказка'; this.setSelectionRange(n,this.value.length)
+                    }">""")
+                search = page.get_by_role("searchbox")
+                search.click()
+                read_field = search.input_value
+            set_clipboard_text("исходный буфер")
+            raw_key(api.VK_RCONTROL)
+            try:
+                for word in ("диктовки", "15:30"):
+                    deadline = time.monotonic() + 15
+                    while word not in (read_field() or "").lower():
+                        assert time.monotonic() < deadline, f"missing {word} on {surface}"
+                        time.sleep(0.05)
+                badge = wt.HWND(user32.FindWindowW("GigaDictateMeter", None))
+                assert badge and user32.IsWindowVisible(badge)
+                assert api.GetForegroundWindow() == hwnd
+            finally:
+                raw_key(api.VK_RCONTROL, up=True)
+            deadline = time.monotonic() + 10
+            while "dictation committed to editor" not in app.log.read_text("utf-8", "replace"):
+                assert time.monotonic() < deadline, surface
+                time.sleep(0.05)
+            assert read_field().count("15:30") == 1
+            assert get_clipboard_text() == "исходный буфер"
+            time.sleep(0.25)
+            assert not user32.IsWindowVisible(badge)
+            browser.close()
+            return
         set_clipboard_text("исходный буфер")
         raw_key(api.VK_RCONTROL)
         try:
