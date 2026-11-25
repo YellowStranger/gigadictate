@@ -223,7 +223,7 @@ def test_browser_message_field(app, surface):
                 for word in ("диктовки", "15:30"):
                     deadline = time.monotonic() + 15
                     while word not in (read_field() or "").lower():
-                        assert time.monotonic() < deadline, f"missing {word} on {surface}"
+                        assert time.monotonic() < deadline, f"missing {word} on {surface}: {read_field()!r}"
                         time.sleep(0.05)
                 badge = wt.HWND(user32.FindWindowW("GigaDictateMeter", None))
                 assert badge and user32.IsWindowVisible(badge)

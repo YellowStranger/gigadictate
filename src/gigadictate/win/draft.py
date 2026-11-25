@@ -256,7 +256,12 @@ class AccessibleDraft:
                     if confirms(actual, (ident, updated, self.start + len(replacement), self.start + len(replacement))):
                         break
                     if time.monotonic() >= deadline:
-                        logging.getLogger(__name__).info("draft update: paste not confirmed")
+                        logging.getLogger(__name__).info(
+                            "draft update: paste not confirmed; stable id=%s, intended=%d, observed=%d, "
+                            "common prefix=%d, expected caret=%d, selection=%d:%d",
+                            actual[0] == ident, len(updated), len(actual[1]),
+                            len(commonprefix([actual[1], updated])), self.start + len(replacement),
+                            actual[2], actual[3])
                         return False
                     time.sleep(0.02)
                 self.pending = None
