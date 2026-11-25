@@ -161,12 +161,14 @@ def test_resources(app):
     assert private < 900
 
 
-def test_browser_message_field(app):
+@pytest.mark.parametrize("live_ranges", [False, True], ids=["default", "renderer-accessibility"])
+def test_browser_message_field(app, live_ranges):
     from playwright.sync_api import sync_playwright
     from gigadictate.win.inject import get_clipboard_text, set_clipboard_text
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(channel="chrome", headless=False)
+        browser = playwright.chromium.launch(channel="chrome", headless=False,
+                                             args=["--force-renderer-accessibility"] if live_ranges else [])
         page = browser.new_page()
         page.set_content('<div role="textbox" aria-label="Сообщение" contenteditable="true">Черновик: </div>')
         page.evaluate("document.title = 'GigaDictate browser test'")
@@ -197,9 +199,12 @@ def test_browser_message_field(app):
         set_clipboard_text("исходный буфер")
         raw_key(api.VK_RCONTROL)
         try:
-            page.wait_for_function('document.querySelector("[contenteditable]").innerText.includes("диктовки")',
-                                   timeout=15000)
-            page.wait_for_timeout(2600)
+            if live_ranges:
+                page.wait_for_function('document.querySelector("[contenteditable]").innerText.includes("диктовки")',
+                                       timeout=15000)
+                page.wait_for_timeout(2600)
+            else:
+                page.wait_for_timeout(4800)
         finally:
             raw_key(api.VK_RCONTROL, up=True)
         page.wait_for_function('document.querySelector("[contenteditable]").innerText.includes("15:30")',
