@@ -204,7 +204,10 @@ def test_browser_message_field(app, live_ranges):
                 for marker in ["длинная", "пользователь", "клавиши"]:
                     page.wait_for_function('(word) => document.querySelector("[contenteditable]").innerText.toLowerCase().includes(word)',
                                            arg=marker, timeout=20000)
-                assert editor.inner_text().lower().count("длинная") == 1
+                # The recording repeats after ~15 s, crossing the ASR segment boundary.
+                page.wait_for_function('document.querySelector("[contenteditable]").innerText.toLowerCase().split("пользователь").length === 3',
+                                       timeout=30000)
+                assert editor.inner_text().lower().count("длинная") == 2
             else:
                 page.wait_for_timeout(4800)
         finally:
@@ -217,7 +220,7 @@ def test_browser_message_field(app, live_ranges):
             assert time.monotonic() < deadline, "final result did not reach the browser field"
             time.sleep(0.05)
         value = editor.inner_text()
-        assert value.startswith("Черновик:") and value.lower().count(marker) == 1
+        assert value.startswith("Черновик:") and value.lower().count("пользователь" if live_ranges else marker) == (2 if live_ranges else 1)
         deadline = time.monotonic() + 5
         while get_clipboard_text() != "исходный буфер":
             assert time.monotonic() < deadline, "clipboard did not return to its initial state"
