@@ -120,7 +120,7 @@ class AccessibleDraft:
             raise ValueError("Поле не поддерживает редактирование")
         document = text.DocumentRange
         current = document.GetText(65537)
-        if len(current) > 65536 or current != value.Value:
+        if len(current) > 65536 or current.replace("\xa0", " ") != value.Value.replace("\xa0", " "):
             raise ValueError("Нет доступного текстового диапазона")
         selected, = text.GetSelection()
         prefix = document.Clone()

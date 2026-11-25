@@ -86,9 +86,10 @@ def test_hold_to_talk_types_text(app):
 
         raw_key(api.VK_RCONTROL)
         deadline = time.monotonic() + 15
-        while "15:30" not in value():
+        while "диктовки" not in value().lower():
             assert time.monotonic() < deadline, value()
             win.pump(0.1)
+        win.pump(2.8)  # capture the rest even if the last preview precedes the last syllable
         raw_key(api.VK_RCONTROL, up=True)
         deadline = time.monotonic() + 12
         while not value().endswith(" "):
@@ -203,6 +204,10 @@ def test_browser_message_field(app):
             raw_key(api.VK_RCONTROL, up=True)
         page.wait_for_function('document.querySelector("[contenteditable]").innerText.includes("15:30")',
                                timeout=20000)
+        deadline = time.monotonic() + 10
+        while "dictation committed to editor" not in app.log.read_text("utf-8", "replace"):
+            assert time.monotonic() < deadline, "final result did not reach the browser field"
+            time.sleep(0.05)
         value = editor.inner_text()
         assert value.startswith("Черновик:") and value.count("15:30") == 1
         deadline = time.monotonic() + 5

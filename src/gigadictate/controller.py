@@ -326,6 +326,8 @@ class Controller:
             reason = self.injector.insert(text, s.target, focus=s.deferred_focus)
         else:
             reason = self.injector.clipboard(text)
+        if not reason:
+            log.info("dictation committed to editor")
         self.inserted.append(text)
         del self.inserted[:-5]
         if reason:
