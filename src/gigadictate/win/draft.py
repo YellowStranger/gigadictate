@@ -127,6 +127,10 @@ class AccessibleDraft:
         prefix = document.Clone()
         prefix.MoveEndpointByRange(1, selected, 0, 0)
         start = len(prefix.GetText())
+        # Empty search boxes can expose an accessibility label as DocumentRange
+        # even though their editable value and selection are both empty.
+        if not value.Value and not selected.GetText():
+            current, start = "", 0
         return (tuple(control.GetRuntimeId()), current, start, start + len(selected.GetText())), value, text
 
     @classmethod
@@ -198,6 +202,12 @@ class AccessibleDraft:
                     # value precedes it, in the same control, at document end.
                     ident, value, caret, end = intended
                     aid, shown, left, right = actual
+                    # The address bar trims a trailing space on paste, including
+                    # the optional separator added when dictation is committed.
+                    if (self.chrome and aid == ident and caret == end == len(value)
+                            and value.endswith(" ") and shown == value.rstrip(" ")
+                            and left == right == len(shown)):
+                        return True
                     return (self.chrome and aid == ident and caret == end == len(value)
                             and left == caret < right == len(shown)
                             and shown[:left].replace("\xa0", " ") == value.replace("\xa0", " "))
@@ -220,6 +230,12 @@ class AccessibleDraft:
                 old = current[self.start:end].replace("\xa0", " ")
                 keep = (len(commonprefix([old, replacement])) if not restore else 0)
                 keep = min(keep, state[2] - self.start)
+                # Omnibox sanitizes leading whitespace from clipboard text.
+                # Include a verified preceding letter in the replacement so the
+                # space between two hypotheses survives Chrome's paste filter.
+                if self.chrome and replacement[keep:keep+1].isspace():
+                    while keep and replacement[keep:keep+1].isspace():
+                        keep -= 1
                 edit_start = self.start + keep
                 selected, = pattern.GetSelection()
                 if edit_start < state[2]:

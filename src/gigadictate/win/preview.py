@@ -38,7 +38,6 @@ def work_area(rect):
 
 class Preview:
     def __init__(self, owner, instance, compact=False):
-        self.compact = compact
         self.started = 0
         self.alpha = self.goal = 0
         self.bg = brush(0x352921)
@@ -50,7 +49,7 @@ class Preview:
         api.RegisterClassW(c.byref(wc))
         width = 100 if compact else min(540, api.GetSystemMetrics(0))
         height_px = 28 if compact else 100
-        self.hwnd = api.CreateWindowExW(0x080800A8 if compact else 0x08080088, wc.lpszClassName, "Диктовка в буфер обмена",
+        self.hwnd = api.CreateWindowExW(0x080800A8 if compact else 0x08080088, wc.lpszClassName, "Диктовка" if compact else "Диктовка в буфер обмена",
                                         0x80000000, (api.GetSystemMetrics(0)-width)//2,
                                         max(0, api.GetSystemMetrics(1)-180), width, height_px, owner, None, instance, None)
         set_region(self.hwnd, region(0, 0, width+1, height_px+1, 24, 24), True)
